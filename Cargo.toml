@@ -1,0 +1,42 @@
+[package]
+name = "vst_window"
+version = "0.1.0"
+authors = ["Anton Lazarev <https://antonok.com>"]
+edition = "2018"
+description = "Cross-platform windowing library for VST plugins"
+repository = "https://github.com/antonok-edm/vst_window"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+keywords = ["vst", "window", "plugin", "cross-platform", "audio"]
+categories = ["external-ffi-bindings", "gui", "os"]
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+raw-window-handle = "^ 0.3"
+
+[target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "macos")))'.dependencies]
+xcb = "^ 0.9"
+# `vst_window` does not directly use `gfx-backend-vulkan`, but any rendering
+# libraries accepting our RawWindowHandle must be able to accept an `xcb`
+# window. So far, those all use `gfx-backend-vulkan`, which does not enable
+# `xcb` support by default.
+# `gfx-backend-vulkan` introduced the `xcb` optional dependency in 0.3.
+gfx-backend-vulkan = { version = ">= 0.3", features = ["xcb"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "^ 0.22"
+objc = "^ 0.2"
+once_cell = "^ 1.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "^ 0.3.9", features = ["windowsx"] }
+once_cell = "^ 1.3"
+
+[dev-dependencies]
+vst = "^ 0.2.0"
+
+[[example]]
+name = "basic"
+crate-type = ["cdylib"]
