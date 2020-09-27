@@ -1,5 +1,9 @@
 # `vst_window`
 
+[![crates.io](https://img.shields.io/crates/v/vst_window.svg)](https://crates.io/crates/vst_window)
+[![Docs](https://docs.rs/vst_window/badge.svg)](https://docs.rs/vst_window/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
+
 `vst_window` is a cross-platform windowing library for VST plugins, written in Rust!
 You can use it to build an editor interface for a plugin using the [`vst`](https://crates.io/crates/vst) crate.
 
