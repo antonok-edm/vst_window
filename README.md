@@ -42,6 +42,12 @@ Development branches for new features will be maintained until cross-platform pa
 
 ## Sample usage
 
+### In the wild
+
+[ampli-Fe](https://github.com/antonok-edm/ampli-fe) is a minimal yet complete VST plugin example, freely licensed under MIT and Apache-2.0.
+
+### From scratch
+
 First, it's recommended to follow the [example plugin](https://github.com/RustAudio/vst-rs#example-plugin) section from the `vst` crate to get a working plugin without an editor interface.
 
 Be sure to add `vst_window` and [`raw-window-handle`](https://crates.io/crates/raw-window-handle) as dependencies to your `Cargo.toml` manifest.
