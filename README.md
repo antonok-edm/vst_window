@@ -46,6 +46,8 @@ Development branches for new features will be maintained until cross-platform pa
 
 [ampli-Fe](https://github.com/antonok-edm/ampli-fe) is a minimal yet complete VST plugin example, freely licensed under MIT and Apache-2.0.
 
+The [`iced` branch of OctaSine](https://github.com/greatest-ape/OctaSine/tree/iced) shows off an example of integration with the [Iced GUI framework](https://github.com/hecrj/iced).
+
 ### From scratch
 
 First, it's recommended to follow the [example plugin](https://github.com/RustAudio/vst-rs#example-plugin) section from the `vst` crate to get a working plugin without an editor interface.
