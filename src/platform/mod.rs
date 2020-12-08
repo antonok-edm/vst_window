@@ -16,32 +16,16 @@ use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
 use crate::event::WindowEvent;
 
-#[cfg(any(
+#[cfg_attr(any(
     target_os = "linux",
     target_os = "dragonfly",
     target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd"
-))]
-mod unix;
-#[cfg(any(
-    target_os = "linux",
-    target_os = "dragonfly",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use unix as os;
-
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "macos")]
-use macos as os;
-
-#[cfg(target_os = "windows")]
-mod windows;
-#[cfg(target_os = "windows")]
-use windows as os;
+), path = "unix/mod.rs")]
+#[cfg_attr(target_os = "macos", path = "macos/mod.rs")]
+#[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
+mod os;
 
 use os::event_source::EventSourceImpl;
 use os::window::EditorWindowImpl;
