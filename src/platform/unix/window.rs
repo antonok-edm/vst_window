@@ -1,39 +1,39 @@
 //! Provides window setup logic specific to the Unix platform.
 
+use std::{convert::TryInto, sync::Arc};
+
+use anyhow::Context;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbHandle};
+use x11rb::{
+    connection::Connection, protocol::xproto::ConnectionExt as _, wrapper::ConnectionExt as _,
+};
 
 use crate::platform::EditorWindowBackend;
 
-/// "User-specified size" flag for WM_NORMAL_HINTS
-const USSIZE: u32 = 2;
-/// "Program-specified" min size flag for WM_NORMAL_HINTS
-const PMINSIZE: u32 = 16;
-/// "Program-specified" max size flag for WM_NORMAL_HINTS
-const PMAXSIZE: u32 = 32;
-
 pub(in crate::platform) struct EditorWindowImpl {
-    /// This is always `Some` throughout the usable lifetime of the `EditorWindow`; it will only be
-    /// `None` during the `Drop` implementation.
-    pub connection: Option<xcb::base::Connection>,
-    window_id: u32,
+    pub connection: Arc<x11rb::xcb_ffi::XCBConnection>,
+    window_id: x11rb::protocol::xproto::Window,
+}
+
+impl Drop for EditorWindowImpl {
+    fn drop(&mut self) {
+        let _ = self.connection.destroy_window(self.window_id);
+    }
 }
 
 unsafe impl HasRawWindowHandle for EditorWindowImpl {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let mut handle = XcbHandle::empty();
-        handle.connection =
-            self.connection.as_ref().unwrap().get_raw_conn() as *mut std::ffi::c_void;
+        handle.connection = self.connection.get_raw_xcb_connection() as *mut std::ffi::c_void;
         handle.window = self.window_id;
         RawWindowHandle::Xcb(handle)
     }
 }
 
-impl Drop for EditorWindowImpl {
-    /// The `xcb` crate will disconnect the connection to the backend when the `Connection` type is
-    /// dropped. Here, we convert the wrapper back into a raw connection, to prevent it from being
-    /// disconnected a second time in the `EventSource`.
-    fn drop(&mut self) {
-        self.connection.take().unwrap().into_raw_conn();
+x11rb::atom_manager! {
+    AtomCollection: AtomCollectionCookie {
+        _NET_WM_WINDOW_TYPE,
+        _NET_WM_WINDOW_TYPE_DIALOG,
     }
 }
 
@@ -45,94 +45,126 @@ impl EditorWindowBackend for EditorWindowImpl {
     ///
     /// XCB operations can be called from any thread - unlike the other platforms, there are
     /// practically no restrictions on the control flow of the windowing logic.
-    fn build(parent: *mut std::os::raw::c_void, size_xy: (i32, i32)) -> Self {
-        let (connection, screen_num) = xcb::base::Connection::connect(None).unwrap();
-        let setup = connection.get_setup();
-        let screen = setup.roots().nth(screen_num as usize).expect("Get screen");
-
-        let foreground = connection.generate_id();
-        let values = [
-            (xcb::GC_FOREGROUND, screen.black_pixel()),
-            (xcb::GC_GRAPHICS_EXPOSURES, 0),
-        ];
-        xcb::create_gc(&connection, foreground, screen.root(), &values[..]);
-
-        let event_mask = xcb::EVENT_MASK_EXPOSURE
-            | xcb::EVENT_MASK_KEY_PRESS
-            | xcb::EVENT_MASK_BUTTON_PRESS
-            | xcb::EVENT_MASK_BUTTON_RELEASE
-            | xcb::EVENT_MASK_POINTER_MOTION;
-        let wid = connection.generate_id();
-        let parent = parent as u32;
-        let values = [
-            (xcb::CW_BACK_PIXEL, screen.black_pixel()),
-            (xcb::CW_EVENT_MASK, event_mask),
-        ];
-
-        let _cookie = xcb::xproto::create_window(
-            &connection,
-            xcb::COPY_FROM_PARENT as u8,
-            wid,
-            parent,
-            0,
-            0,
-            size_xy.0 as u16,
-            size_xy.1 as u16,
-            0,
-            xcb::WINDOW_CLASS_INPUT_OUTPUT as u16,
-            screen.root_visual(),
-            &values[..],
-        );
-
-        let net_wm_window_type = xcb_intern_string(&connection, "_NET_WM_WINDOW_TYPE");
-        let net_wm_window_type_dialog =
-            xcb_intern_string(&connection, "_NET_WM_WINDOW_TYPE_DIALOG");
-        xcb::change_property(
-            &connection,
-            xcb::PROP_MODE_REPLACE as u8,
-            wid,
-            net_wm_window_type,
-            xcb::ATOM_ATOM,
-            32,
-            &[net_wm_window_type_dialog],
-        );
-
-        let wm_normal_hints = xcb_intern_string(&connection, "WM_NORMAL_HINTS");
-        let size_hints = {
-            let size_x = size_xy.0 as u32;
-            let size_y = size_xy.1 as u32;
-            let flags = USSIZE | PMINSIZE | PMAXSIZE;
-            [
-                flags, 0, 0, 0, 0, size_x, size_y, size_x, size_y, 0, 0, 0, 0, size_x, size_y,
-            ]
+    unsafe fn build(
+        parent: *mut std::os::raw::c_void,
+        size_xy: (i32, i32),
+    ) -> anyhow::Result<Self> {
+        let size_xy: (u16, u16) = {
+            (
+                size_xy
+                    .0
+                    .try_into()
+                    .map_err(|_| crate::Error::InvalidWindowSize {
+                        requested_size_xy: size_xy,
+                        limits: 0..i16::MAX.into(),
+                    })?,
+                size_xy
+                    .1
+                    .try_into()
+                    .map_err(|_| crate::Error::InvalidWindowSize {
+                        requested_size_xy: size_xy,
+                        limits: 0..i16::MAX.into(),
+                    })?,
+            )
         };
-        xcb::change_property(
-            &connection,
-            xcb::PROP_MODE_REPLACE as u8,
-            wid,
-            wm_normal_hints,
-            xcb::xproto::ATOM_WM_SIZE_HINTS,
-            32,
-            &size_hints,
-        );
 
-        xcb::xproto::map_window(&connection, wid);
-        connection.flush();
+        use x11rb::protocol::xproto;
 
-        drop(_cookie);
+        let (connection, _screen_num) = x11rb::xcb_ffi::XCBConnection::connect(None)
+            .context("couldn't establish connection to display server")?;
 
-        Self {
-            connection: Some(connection),
-            window_id: wid,
+        let parent_id: u32 = (parent as usize)
+            .try_into()
+            .map_err(|_| crate::Error::Other {
+                source: anyhow::anyhow!("invalid parent id supplied"),
+                backend: crate::Backend::X11,
+            })?;
+        use x11rb::protocol::xproto::EventMask;
+        // listen to appropriate events
+        let event_mask = EventMask::EXPOSURE
+            | EventMask::KEY_PRESS
+            | EventMask::BUTTON_PRESS
+            | EventMask::BUTTON_RELEASE
+            | EventMask::POINTER_MOTION;
+        let aux = xproto::CreateWindowAux {
+            //background_pixel: screen.black_pixel
+            event_mask: Some(event_mask.into()),
+            ..Default::default()
+        };
+        let window_id = connection.generate_id()?;
+        let create_window_seq = connection
+            .create_window(
+                x11rb::COPY_DEPTH_FROM_PARENT,
+                window_id,
+                parent_id,
+                0,
+                0,
+                size_xy.0,
+                size_xy.1,
+                0,
+                xproto::WindowClass::INPUT_OUTPUT,
+                x11rb::COPY_FROM_PARENT,
+                &aux,
+            )?
+            .sequence_number();
+
+        // (property name) strings must first be interned to be used
+        let atom_collection = AtomCollection::new(&connection)
+            .context("failed to intern strings")?
+            .reply()
+            .context("failed to intern strings")?;
+
+        // indicate that this is a dialog type window
+        // see https://specifications.freedesktop.org/wm-spec/1.3/ar01s05.html#idm44949527944400
+        connection.change_property32(
+            xproto::PropMode::REPLACE,
+            window_id,
+            atom_collection._NET_WM_WINDOW_TYPE,
+            xproto::AtomEnum::ATOM,
+            &[atom_collection._NET_WM_WINDOW_TYPE_DIALOG],
+        )?;
+
+        // prevent the window from being resized
+        let size_hints = x11rb::properties::WmSizeHints {
+            min_size: Some((size_xy.0.into(), size_xy.1.into())),
+            max_size: Some((size_xy.0.into(), size_xy.1.into())),
+            ..Default::default()
+        };
+        size_hints.set_normal_hints(&connection, window_id)?;
+
+        // show the window
+        connection.map_window(window_id)?;
+
+        connection.sync().context("failed to sync connection")?;
+
+        while let Some(event) = connection.poll_for_event()? {
+            if let x11rb::protocol::Event::Error(err) = event {
+                // Special case for error type "Window" on create_window call which can only mean the provided parent window id is invalid to aid debugging
+                if err.sequence == (create_window_seq & u16::MAX as u64) as u16
+                    && err.error_kind == x11rb::protocol::ErrorKind::Window
+                {
+                    return Err(anyhow::anyhow!(crate::Error::Other {
+                        source: anyhow::anyhow!("invalid parent id supplied"),
+                        backend: crate::Backend::X11,
+                    }));
+                }
+                // Pretty print if extension and request name are known, otherwise print raw codes
+                if let (Some(ext_name), Some(req_name)) = (&err.extension_name, err.request_name) {
+                    return Err(anyhow::anyhow!(
+                        "request {} ({}) failed: {:?}",
+                        req_name,
+                        ext_name,
+                        err.error_kind
+                    ));
+                } else {
+                    return Err(anyhow::anyhow!("{:?}", err));
+                }
+            }
         }
-    }
-}
 
-/// With XCB, some window properties are identified using `Atom`s, which are identifiers for
-/// strings that have been previously interned.
-fn xcb_intern_string(connection: &xcb::Connection, value: &str) -> xcb::Atom {
-    match xcb::intern_atom(&connection, false, value).get_reply() {
-        Ok(reply) => reply.atom(),
-        Err(_) => panic!("could not intern {} atom", value),
+        Ok(Self {
+            connection: Arc::new(connection),
+            window_id,
+        })
     }
 }

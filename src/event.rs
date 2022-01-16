@@ -2,6 +2,7 @@
 
 /// Represents an interaction with an editor window.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum WindowEvent {
     /// XY coordinates. Each coordinate is based in the range [0, 1], scaled to the bounds of the
     /// window. Origin is at the top-left. The coordinates could be outside of the range if the
