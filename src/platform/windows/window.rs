@@ -1,27 +1,27 @@
 //! Provides window setup logic specific to the Windows platform.
 
 use std::{
-    os::windows::ffi::OsStrExt,
-    sync::{Mutex, Weak},
+    convert::TryInto,
+    sync::{Arc, Mutex, Weak},
 };
 
 use raw_window_handle::{windows::WindowsHandle, HasRawWindowHandle, RawWindowHandle};
 use winapi::{
     shared::{minwindef, ntdef, windef, winerror},
-    um::{errhandlingapi, libloaderapi, winbase, winuser},
+    um::{libloaderapi, winuser},
 };
 
 use crate::platform::{os::get_last_error, EditorWindowBackend};
 
 pub(in crate::platform) struct EditorWindowImpl {
     pub hwnd: windef::HWND,
-    _class: VstWindowClass,
+    _class: Arc<VstWindowClass>,
 }
 
 impl Drop for EditorWindowImpl {
     fn drop(&mut self) {
         let error = unsafe { winuser::DestroyWindow(self.hwnd) };
-        if error == minwindef::FALSE && log::log_enabled!(Debug) {
+        if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
             log::debug!(
                 "Failed to destroy window: {}",
                 crate::Error::Other {
@@ -87,7 +87,7 @@ impl EditorWindowBackend for EditorWindowImpl {
             )
         };
         if hwnd.is_null() {
-            let (errno, error) = get_last_error();
+            let (errno, _) = get_last_error();
             // special case invalid parent window case for easier debugging
             if errno == winerror::ERROR_INVALID_WINDOW_HANDLE {
                 return Err(crate::Error::Other {
@@ -115,9 +115,10 @@ impl EditorWindowBackend for EditorWindowImpl {
     }
 }
 
-fn MAKEINTATOMW(atom: mindef::ATOM) -> ntdef::LPCWSTR {
+#[allow(non_snake_case)]
+fn MAKEINTATOMW(atom: minwindef::ATOM) -> ntdef::LPCWSTR {
     // MAKEINTATOMW is missing: https://github.com/retep998/winapi-rs/issues/576
-    atom as minwindef::WORD as shared::basetsd::ULONG_PTR as ntdef::LPCWSTR
+    atom as minwindef::WORD as winapi::shared::basetsd::ULONG_PTR as ntdef::LPCWSTR
 }
 
 /// Lazily registered window class used for the VST plugin window.
@@ -130,7 +131,7 @@ fn get_window_class(instance: minwindef::HINSTANCE) -> anyhow::Result<Arc<VstWin
         static ref WINDOW_CLASS: Mutex<Weak<VstWindowClass>> = Mutex::new(Weak::new());
     }
 
-    let guard = WINDOW_CLASS
+    let mut guard = WINDOW_CLASS
         .lock()
         .expect("other thread panicked in get_window_class");
 
@@ -138,7 +139,7 @@ fn get_window_class(instance: minwindef::HINSTANCE) -> anyhow::Result<Arc<VstWin
         Ok(class)
     } else {
         let class = Arc::new(VstWindowClass::create(instance)?);
-        *class = class.downgrade();
+        *guard = Arc::downgrade(&class);
         Ok(class)
     }
 }
@@ -156,7 +157,7 @@ impl VstWindowClass {
                 lpfnWndProc: Some(super::event_source::wnd_proc),
                 lpszClassName: wchar::wchz!("vst_window_class").as_ptr(),
                 hInstance: instance,
-                ..unsafe { std::mem::zeroed() }
+                ..std::mem::zeroed()
             };
 
             winuser::RegisterClassExW(&class_ex as *const winuser::WNDCLASSEXW)
@@ -176,8 +177,8 @@ impl VstWindowClass {
 
 impl Drop for VstWindowClass {
     fn drop(&mut self) {
-        let error = unsafe { winuser::UnregisterClassW(MAKEINTATOMW(self.0), std::ptr::null()) };
-        if error == minwindef::FALSE && log::log_enabled!(Debug) {
+        let error = unsafe { winuser::UnregisterClassW(MAKEINTATOMW(self.0), std::ptr::null_mut()) };
+        if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
             log::debug!(
                 "Failed to unregister window class: {}",
                 crate::Error::Other {

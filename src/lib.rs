@@ -1,4 +1,5 @@
 //! `vst_window` provides a cross-platform API for implementing VST plugin editor windows.
+#![deny(unsafe_op_in_unsafe_fn)]
 
 mod event;
 mod platform;
@@ -66,6 +67,13 @@ impl From<anyhow::Error> for Error {
         }
 
         // X11
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
         {
             use x11rb::errors::*;
             if error.downcast_ref::<ConnectionError>().is_some() {
