@@ -20,6 +20,8 @@ use super::window::EditorWindowImpl;
 use crate::event::{MouseButton, WindowEvent};
 use crate::platform::EventSourceBackend;
 
+// TODO potentially move the event delegate stuff to window.rs and use the EventSubview as "the" view returned by window.rs to adhere to the true "parent" meaning
+
 /// Name of the field used to store the `EventDelegate` pointer in the `EventSubview` class.
 const EVENT_DELEGATE_IVAR: &str = "EVENT_DELEGATE_IVAR";
 
@@ -36,14 +38,14 @@ impl EventSourceBackend for EventSourceImpl {
     /// safely access the plugin through the subclass, so we just forward them over a channel to be
     /// polled by the editor interface. The channel is part of the `EventDelegate` which is
     /// heap-allocated and pointed to by a member variable of the subclass.
-    fn new(window: &EditorWindowImpl, size_xy: (i32, i32)) -> Self {
+    fn new(window: &EditorWindowImpl, size_xy: (i32, i32)) -> anyhow::Result<Self> {
         unsafe {
             let event_subview: id = msg_send![EVENT_SUBVIEW_DECL.class, alloc];
             event_subview.initWithFrame_(NSRect::new(
                 NSPoint::new(0., 0.),
                 NSSize::new(size_xy.0 as f64, size_xy.1 as f64),
             ));
-            let _: id = msg_send![window.ns_view, addSubview: event_subview];
+            let _: () = msg_send![window.ns_view, addSubview: event_subview];
 
             let (event_sender, incoming_events) = channel();
 
@@ -55,21 +57,27 @@ impl EventSourceBackend for EventSourceImpl {
 
             (*event_subview).set_ivar(EVENT_DELEGATE_IVAR, event_delegate as *mut c_void);
 
-            Self {
+            Ok(Self {
                 event_subview,
                 incoming_events,
-            }
+            })
         }
     }
 
     fn poll_event(&self) -> Option<WindowEvent> {
-        self.incoming_events.try_recv().ok()
+        match self.incoming_events.try_recv() {
+            Ok(ev) => Some(ev),
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => unreachable!(
+                "self.event_subview is released when self is dropped, panic should abort"
+            ),
+        }
     }
 }
 
 impl Drop for EventSourceImpl {
     fn drop(&mut self) {
-        let _: id = unsafe { msg_send![self.event_subview, dealloc] };
+        let _: id = unsafe { msg_send![self.event_subview, release] };
     }
 }
 
@@ -86,7 +94,7 @@ impl EventDelegate {
     /// `clippy` has issues with this function signature, making the valid point that this could
     /// create multiple mutable references to the `EventDelegate`. However, in practice macOS
     /// blocks for the entire duration of each event callback, so this should be fine.
-    #[allow(clippy::mut_from_ref)]
+    //#[allow(clippy::mut_from_ref)]
     fn from_field(obj: &Object) -> &mut EventDelegate {
         unsafe {
             let delegate_ptr: *mut c_void = *obj.get_ivar(EVENT_DELEGATE_IVAR);
@@ -111,8 +119,8 @@ unsafe impl Sync for EventSubview {}
 /// Lazily initialized NSView subclass declaration that is capable of receiving window events
 /// through overloaded methods. Crucially, it holds an `EventDelegate` pointer so it can forward
 /// events back to the editor logic.
-static EVENT_SUBVIEW_DECL: once_cell::sync::Lazy<EventSubview> =
-    once_cell::sync::Lazy::new(|| unsafe {
+lazy_static::lazy_static! {
+    static EVENT_SUBVIEW_DECL: EventSubview = unsafe {
         let mut class = ClassDecl::new("EventSubview", class!(NSView)).unwrap();
         class.add_method(sel!(dealloc), dealloc as extern "C" fn(&Object, Sel));
         class.add_method(
@@ -148,7 +156,8 @@ static EVENT_SUBVIEW_DECL: once_cell::sync::Lazy<EventSubview> =
         EventSubview {
             class: class.register(),
         }
-    });
+    };
+}
 
 extern "C" fn dealloc(this: &Object, _sel: Sel) {
     unsafe {
@@ -188,6 +197,8 @@ extern "C" fn right_mouse_down(this: &Object, _sel: Sel, event: id) {
         1. - (location.y / delegate.size_xy.1 as f64) as f32,
     ));
     delegate.send(WindowEvent::MouseClick(MouseButton::Right));
+
+    // TODO potentially call super https://developer.apple.com/documentation/appkit/nsview
 }
 
 extern "C" fn right_mouse_up(this: &Object, _sel: Sel, event: id) {
