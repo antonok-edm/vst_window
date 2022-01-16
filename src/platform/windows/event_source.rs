@@ -3,13 +3,16 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use winapi::{
-    shared::{minwindef, windef, winerror},
+    shared::{minwindef, windef},
     um::{errhandlingapi, winuser},
 };
 
-use crate::event::{MouseButton, WindowEvent};
 use crate::platform::EditorWindowImpl;
 use crate::platform::EventSourceBackend;
+use crate::{
+    event::{MouseButton, WindowEvent},
+    platform::os::get_last_error,
+};
 
 pub(in crate::platform) struct EventSourceImpl {
     hwnd: windef::HWND,
@@ -68,21 +71,19 @@ impl Drop for EventSourceImpl {
             let event_sender_ptr = winuser::SetWindowLongPtrW(
                 self.hwnd,
                 winuser::GWLP_USERDATA,
-                std::ptr::null_mut() as winapi::shared::basetsd::LONG_PTR,
+                std::ptr::null_mut::<winapi::ctypes::c_void>() as winapi::shared::basetsd::LONG_PTR,
             ) as *mut (Sender<WindowEvent>, (i32, i32));
 
             if !event_sender_ptr.is_null() {
                 drop(Box::from_raw(event_sender_ptr));
-            } else {
-                if log::log_enabled!(Debug) && errhandlingapi::GetLastError() != 0 {
-                    log::debug!(
-                        "Failed to cleanup event sender: {}",
-                        crate::Error::Other {
-                            source: anyhow::anyhow!(get_last_error().1).context("SetWindowLongPtrW"),
-                            backend: crate::Backend::WinApi,
-                        }
-                    );
-                }
+            } else if log::log_enabled!(log::Level::Debug) && errhandlingapi::GetLastError() != 0 {
+                log::debug!(
+                    "Failed to cleanup event sender: {}",
+                    crate::Error::Other {
+                        source: anyhow::anyhow!(get_last_error().1).context("SetWindowLongPtrW"),
+                        backend: crate::Backend::WinApi,
+                    }
+                );
             }
         }
     }
@@ -100,7 +101,7 @@ pub(super) unsafe extern "system" fn wnd_proc(
     wparam: minwindef::WPARAM,
     lparam: minwindef::LPARAM,
 ) -> minwindef::LRESULT {
-    let (event_sender, &mut size_xy) = {
+    let (event_sender, size_xy) = unsafe {
         // TODO what if somebody else modifies GWLP_USERDATA?
         let event_sender_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA)
             as *mut (Sender<WindowEvent>, (i32, i32));
@@ -115,7 +116,7 @@ pub(super) unsafe extern "system" fn wnd_proc(
     match umsg {
         // https://docs.microsoft.com/en-us/windows/win32/dlgbox/wm-getdlgcode
         // TODO check whether this is needed
-        // winuser::WM_GETDLGCODE => winuser::DLGC_WANTALLKEYS,
+        //winuser::WM_GETDLGCODE => return winuser::DLGC_WANTALLKEYS,
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-mousemove
         winuser::WM_MOUSEMOVE => {
             let x_pos = winapi::shared::windowsx::GET_X_LPARAM(lparam);
@@ -125,56 +126,51 @@ pub(super) unsafe extern "system" fn wnd_proc(
             event_sender
                 .send(WindowEvent::CursorMovement(x, y))
                 .unwrap();
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
         }
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-lbuttondown
         winuser::WM_LBUTTONDOWN => {
             event_sender
                 .send(WindowEvent::MouseClick(MouseButton::Left))
                 .unwrap();
-            winuser::SetCapture(hwnd);
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
+            unsafe { winuser::SetCapture(hwnd) };
         }
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-lbuttonup
         winuser::WM_LBUTTONUP => {
             event_sender
                 .send(WindowEvent::MouseRelease(MouseButton::Left))
                 .unwrap();
-            winuser::ReleaseCapture();
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
+            unsafe { winuser::ReleaseCapture() };
         }
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-rbuttondown
         winuser::WM_RBUTTONDOWN => {
             event_sender
                 .send(WindowEvent::MouseClick(MouseButton::Right))
                 .unwrap();
-            winuser::SetCapture(hwnd);
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
+            unsafe { winuser::SetCapture(hwnd) };
         }
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-rbuttonup
         winuser::WM_RBUTTONUP => {
             event_sender
                 .send(WindowEvent::MouseRelease(MouseButton::Right))
                 .unwrap();
-            winuser::ReleaseCapture();
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
+            unsafe { winuser::ReleaseCapture() };
         }
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-mbuttondown
         winuser::WM_MBUTTONDOWN => {
             event_sender
                 .send(WindowEvent::MouseClick(MouseButton::Middle))
                 .unwrap();
-            winuser::SetCapture(hwnd);
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
+            unsafe { winuser::SetCapture(hwnd) };
         }
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-mbuttonup
         winuser::WM_MBUTTONUP => {
             event_sender
                 .send(WindowEvent::MouseRelease(MouseButton::Middle))
                 .unwrap();
-            winuser::ReleaseCapture();
-            winuser::DefWindowProcW(hwnd, umsg, wparam, lparam)
+            unsafe { winuser::ReleaseCapture() };
         }
-        _ => winuser::DefWindowProcW(hwnd, umsg, wparam, lparam),
+        _ => (),
     }
+    // forward to default implementation
+    unsafe { winuser::DefWindowProcW(hwnd, umsg, wparam, lparam) }
 }
