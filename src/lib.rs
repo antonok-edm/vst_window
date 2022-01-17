@@ -37,7 +37,7 @@ pub enum Error {
         requested_size_xy: (i32, i32),
         limits: std::ops::Range<i32>,
     },
-    #[error("unclassified error ({backend})")]
+    #[error("unclassified error ({backend}): {source}")]
     Other {
         source: anyhow::Error,
         backend: Backend,
