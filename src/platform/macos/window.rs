@@ -35,7 +35,10 @@ impl EditorWindowBackend for EditorWindowImpl {
     /// Technically, this doesn't even use `parent` as a parent window - the host DAW creates an
     /// NSWindow with an embedded NSView, and passes along the id of the NSView. We just directly
     /// pass along that same NSView for rendering!
-    unsafe fn build(parent: *mut std::os::raw::c_void, _size_xy: (i32, i32)) -> anyhow::Result<Self> {
+    unsafe fn build(
+        parent: *mut std::os::raw::c_void,
+        _size_xy: (i32, i32),
+    ) -> anyhow::Result<Self> {
         // TODO validate window size
         //return error if parent is nil to aid debugging
         if parent.is_null() {
