@@ -66,7 +66,7 @@ impl Editor for MyPluginEditor {
                     true
                 }
                 Err(error) => {
-                    log::error!("Failed to open editor window: {}", error);
+                    log::error!("Failed to open editor window: {:#}", anyhow::anyhow!(error));
                     false
                 }
             }

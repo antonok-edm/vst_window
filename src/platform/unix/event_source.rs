@@ -28,12 +28,16 @@ impl EventSourceBackend for EventSourceImpl {
             let maybe_event = match self.connection.poll_for_event() {
                 Ok(e) => e,
                 Err(error) => {
-                    log::debug!("Failed to poll for new events: {}", crate::Error::Other {
-                        source: anyhow::anyhow!(error),
-                        backend: crate::Backend::X11,
-                    });
+                    log::debug!(
+                        "Error: {:#}",
+                        anyhow::anyhow!(crate::Error::Other {
+                            source: anyhow::anyhow!(error),
+                            backend: crate::Backend::X11,
+                        })
+                        .context("failed to poll for new events")
+                    );
                     return None;
-                },
+                }
             };
             if let Some(event) = maybe_event {
                 use x11rb::protocol::Event as X11Event;

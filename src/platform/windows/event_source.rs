@@ -78,11 +78,12 @@ impl Drop for EventSourceImpl {
                 drop(Box::from_raw(event_sender_ptr));
             } else if log::log_enabled!(log::Level::Debug) && errhandlingapi::GetLastError() != 0 {
                 log::debug!(
-                    "Failed to cleanup event sender: {}",
-                    crate::Error::Other {
+                    "Error: {:#}",
+                    anyhow::anyhow!(crate::Error::Other {
                         source: anyhow::anyhow!(get_last_error().1).context("SetWindowLongPtrW"),
                         backend: crate::Backend::WinApi,
-                    }
+                    })
+                    .context("failed to cleanup event sender")
                 );
             }
         }

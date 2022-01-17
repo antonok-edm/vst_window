@@ -69,7 +69,8 @@ pub unsafe fn setup(
     parent: *mut std::os::raw::c_void,
     size_xy: (i32, i32),
 ) -> crate::Result<EditorWindow> {
-    let window = unsafe { EditorWindowImpl::build(parent, size_xy) }.context("couldn't initialize window")?;
+    let window = unsafe { EditorWindowImpl::build(parent, size_xy) }
+        .context("couldn't initialize window")?;
     let event_source =
         EventSourceImpl::new(&window, size_xy).context("couldn't initialize event source")?;
     Ok(EditorWindow(window, event_source))

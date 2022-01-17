@@ -23,11 +23,12 @@ impl Drop for EditorWindowImpl {
         let error = unsafe { winuser::DestroyWindow(self.hwnd) };
         if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
             log::debug!(
-                "Failed to destroy window: {}",
-                crate::Error::Other {
+                "Error: {}",
+                anyhow::anyhow!(crate::Error::Other {
                     source: anyhow::anyhow!(get_last_error().1).context("DestroyWindow"),
                     backend: crate::Backend::WinApi,
-                }
+                })
+                .context("failed to destroy window")
             );
         }
     }
@@ -177,14 +178,16 @@ impl VstWindowClass {
 
 impl Drop for VstWindowClass {
     fn drop(&mut self) {
-        let error = unsafe { winuser::UnregisterClassW(MAKEINTATOMW(self.0), std::ptr::null_mut()) };
+        let error =
+            unsafe { winuser::UnregisterClassW(MAKEINTATOMW(self.0), std::ptr::null_mut()) };
         if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
             log::debug!(
-                "Failed to unregister window class: {}",
-                crate::Error::Other {
+                "Error: {:#}",
+                anyhow::anyhow!(crate::Error::Other {
                     source: anyhow::anyhow!(get_last_error().1).context("UnregisterClassW"),
                     backend: crate::Backend::WinApi,
-                }
+                })
+                .context("failed to unregister window class")
             );
         }
     }
