@@ -107,7 +107,7 @@ pub(super) unsafe extern "system" fn wnd_proc(
         let event_sender_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA)
             as *mut (Sender<WindowEvent>, (i32, i32));
         if event_sender_ptr.is_null() {
-            log::debug!("Ignored window event because event sender is not yet initialized (Win32)");
+            log::debug!("Ignored window event ({}) because event sender is not yet initialized (Win32)", umsg);
             return winuser::DefWindowProcW(hwnd, umsg, wparam, lparam);
         }
 

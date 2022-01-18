@@ -73,19 +73,25 @@ pub unsafe fn setup(
         .context("couldn't initialize window")?;
     let event_source =
         EventSourceImpl::new(&window, size_xy).context("couldn't initialize event source")?;
-    Ok(EditorWindow(window, event_source))
+    Ok(EditorWindow {
+        window,
+        event_source,
+    })
 }
 
 /// `RawWindowHandle` implementor returned by the `setup` function.
 /// Source of events from a corresponding window, created by the `setup` function.
 /// The window will be destroyed once this is dropped.
-pub struct EditorWindow(EditorWindowImpl, EventSourceImpl);
+pub struct EditorWindow {
+    event_source: EventSourceImpl, // drop first
+    window: EditorWindowImpl,      // drop second
+}
 
 impl EditorWindow {
     /// Returns the next `WindowEvent`, if one is available. This should be called in a `while let`
     /// loop until empty.
     pub fn poll_event(&self) -> Option<WindowEvent> {
-        self.1.poll_event()
+        self.event_source.poll_event()
     }
 }
 
@@ -93,6 +99,6 @@ impl EditorWindow {
 /// through the `raw-window-handle` crate.
 unsafe impl HasRawWindowHandle for EditorWindow {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        self.0.raw_window_handle()
+        self.window.raw_window_handle()
     }
 }
