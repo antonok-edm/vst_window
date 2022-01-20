@@ -14,7 +14,7 @@ categories = ["external-ffi-bindings", "gui", "os"]
 crate-type = ["lib"]
 
 [dependencies]
-raw-window-handle = "^ 0.3"
+raw-window-handle = "^ 0.4"
 
 [target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "macos")))'.dependencies]
 xcb = "^ 0.9"

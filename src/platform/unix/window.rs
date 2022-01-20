@@ -1,6 +1,6 @@
 //! Provides window setup logic specific to the Unix platform.
 
-use raw_window_handle::{unix::XcbHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbHandle};
 
 use crate::platform::EditorWindowBackend;
 
@@ -20,11 +20,11 @@ pub(in crate::platform) struct EditorWindowImpl {
 
 unsafe impl HasRawWindowHandle for EditorWindowImpl {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        RawWindowHandle::Xcb(XcbHandle {
-            connection: self.connection.as_ref().unwrap().get_raw_conn() as *mut std::ffi::c_void,
-            window: self.window_id,
-            ..XcbHandle::empty()
-        })
+        let mut handle = XcbHandle::empty();
+        handle.connection =
+            self.connection.as_ref().unwrap().get_raw_conn() as *mut std::ffi::c_void;
+        handle.window = self.window_id;
+        RawWindowHandle::Xcb(handle)
     }
 }
 

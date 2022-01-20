@@ -2,7 +2,7 @@
 
 use cocoa::base::id;
 use objc::{msg_send, sel, sel_impl};
-use raw_window_handle::{macos::MacOSHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{AppKitHandle, HasRawWindowHandle, RawWindowHandle};
 
 use crate::platform::EditorWindowBackend;
 
@@ -15,11 +15,10 @@ unsafe impl HasRawWindowHandle for EditorWindowImpl {
     fn raw_window_handle(&self) -> RawWindowHandle {
         use std::os::raw::c_void;
 
-        RawWindowHandle::MacOS(MacOSHandle {
-            ns_window: self.ns_window as *mut c_void,
-            ns_view: self.ns_view as *mut c_void,
-            ..MacOSHandle::empty()
-        })
+        let mut handle = AppKitHandle::empty();
+        handle.ns_window = self.ns_window as *mut c_void;
+        handle.ns_view = self.ns_view as *mut c_void;
+        RawWindowHandle::MacOS(handle)
     }
 }
 
