@@ -18,12 +18,6 @@ raw-window-handle = "^ 0.3"
 
 [target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "macos")))'.dependencies]
 xcb = "^ 0.9"
-# `vst_window` does not directly use `gfx-backend-vulkan`, but any rendering
-# libraries accepting our RawWindowHandle must be able to accept an `xcb`
-# window. So far, those all use `gfx-backend-vulkan`, which does not enable
-# `xcb` support by default.
-# `gfx-backend-vulkan` introduced the `xcb` optional dependency in 0.3.
-gfx-backend-vulkan = { version = ">= 0.3", features = ["xcb"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "^ 0.22"
