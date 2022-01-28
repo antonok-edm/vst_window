@@ -120,7 +120,7 @@ unsafe impl Sync for EventSubview {}
 /// through overloaded methods. Crucially, it holds an `EventDelegate` pointer so it can forward
 /// events back to the editor logic.
 lazy_static::lazy_static! {
-    static EVENT_SUBVIEW_DECL: EventSubview = unsafe {
+    static ref EVENT_SUBVIEW_DECL: EventSubview = unsafe {
         let mut class = ClassDecl::new("EventSubview", class!(NSView)).unwrap();
         class.add_method(sel!(dealloc), dealloc as extern "C" fn(&Object, Sel));
         class.add_method(
