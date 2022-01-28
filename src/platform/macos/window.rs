@@ -46,7 +46,7 @@ impl EditorWindowBackend for EditorWindowImpl {
             return Err(crate::Error::Other {
                 source: anyhow::anyhow!("invalid parent (null pointer)"),
                 backend: crate::Backend::Cocoa,
-            });
+            }.into());
         }
         let (ns_window, ns_view) = unsafe {
             let ns_view = parent as id;
