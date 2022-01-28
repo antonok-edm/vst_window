@@ -116,10 +116,10 @@ struct EventSubview {
 unsafe impl Send for EventSubview {}
 unsafe impl Sync for EventSubview {}
 
-/// Lazily initialized NSView subclass declaration that is capable of receiving window events
-/// through overloaded methods. Crucially, it holds an `EventDelegate` pointer so it can forward
-/// events back to the editor logic.
 lazy_static::lazy_static! {
+    /// Lazily initialized NSView subclass declaration that is capable of receiving window events
+    /// through overloaded methods. Crucially, it holds an `EventDelegate` pointer so it can forward
+    /// events back to the editor logic.
     static ref EVENT_SUBVIEW_DECL: EventSubview = unsafe {
         let mut class = ClassDecl::new("EventSubview", class!(NSView)).unwrap();
         class.add_method(sel!(dealloc), dealloc as extern "C" fn(&Object, Sel));
