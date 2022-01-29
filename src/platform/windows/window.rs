@@ -20,7 +20,7 @@ unsafe impl HasRawWindowHandle for EditorWindowImpl {
         handle.hwnd = self.hwnd as *mut std::ffi::c_void;
         handle.hinstance =
             unsafe { libloaderapi::GetModuleHandleW(std::ptr::null()) } as *mut std::ffi::c_void;
-        RawWindowHandle::Windows(handle)
+        RawWindowHandle::Win32(handle)
     }
 }
 
