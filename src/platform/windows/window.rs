@@ -19,8 +19,8 @@ unsafe impl HasRawWindowHandle for EditorWindowImpl {
         let mut handle = Win32Handle::empty();
         handle.hwnd = self.hwnd as *mut std::ffi::c_void;
         handle.hinstance =
-            unsafe { libloaderapi::GetModuleHandleW(std::ptr::nul()) } as *mut std::ffi::c_void;
-        RawWindowHandle::Windows(handle)
+            unsafe { libloaderapi::GetModuleHandleW(std::ptr::null()) } as *mut std::ffi::c_void;
+        RawWindowHandle::Win32(handle)
     }
 }
 
