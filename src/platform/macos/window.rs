@@ -18,7 +18,7 @@ unsafe impl HasRawWindowHandle for EditorWindowImpl {
         let mut handle = AppKitHandle::empty();
         handle.ns_window = self.ns_window as *mut c_void;
         handle.ns_view = self.ns_view as *mut c_void;
-        RawWindowHandle::MacOS(handle)
+        RawWindowHandle::AppKit(handle)
     }
 }
 
