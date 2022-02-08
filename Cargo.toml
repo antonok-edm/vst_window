@@ -1,6 +1,6 @@
 [package]
 name = "vst_window"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Anton Lazarev <https://antonok.com>"]
 edition = "2018"
 description = "Cross-platform windowing library for VST plugins"
