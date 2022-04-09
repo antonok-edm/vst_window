@@ -31,8 +31,7 @@ use crate::event::WindowEvent;
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod os;
 
-use os::event_source::EventSourceImpl;
-use os::window::EditorWindowImpl;
+use os::EditorWindowImpl;
 
 /// Crate-internal cross-platform window handle creation API required on each platform.
 trait EditorWindowBackend: raw_window_handle::HasRawWindowHandle + Sized {
@@ -42,22 +41,22 @@ trait EditorWindowBackend: raw_window_handle::HasRawWindowHandle + Sized {
     /// `parent` must be a valid window identifier
     unsafe fn build(parent: *mut std::os::raw::c_void, size_xy: (i32, i32))
         -> anyhow::Result<Self>;
-}
 
-/// Crate-internal cross-platform event source API required on each platform.
-trait EventSourceBackend: Sized {
-    /// Builds a platform-specific event source corresponding to the provided window.
-    fn new(window: &EditorWindowImpl, size_xy: (i32, i32)) -> anyhow::Result<Self>;
     /// Returns the next `WindowEvent`, if one is available.
     fn poll_event(&self) -> Option<WindowEvent>;
 }
 
-/// Build a platform-specific window and return a cross-platform `RawWindowHandle` implementor,
-/// used as a surface for rendering, as well as a cross-platform `EventSource`, which is used to
-/// poll `WindowEvent`s.
+/// Builds a new window with a given `parent`.
 ///
-/// `parent` should be a window handle as passed from a host to a plugin by the `vst` crate.
-/// `size_xy` should be the size returned by the size function on the VST editor. Assumes position of VST editor to be (0, 0).
+/// A child window is created which seamlessly sits inside the window identified by the
+/// platform-specific handle `parent`. It is placed at (0, 0) with a given `size_xy`.
+/// The size may be silently saturated to an upper bound on some platforms.
+/// 
+/// `parent` is passed by the VST host to the plugin in a `effEditOpen` operation.
+/// 
+/// `size_xy` should be the same size returned by the `effEditGetRect` operation.
+/// 
+/// See `EditorWindow` for more details on the returned handle.
 ///
 /// # Safety
 /// `parent` must be a valid window identifier on the corresponding platform i.e.
@@ -69,29 +68,22 @@ pub unsafe fn setup(
     parent: *mut std::os::raw::c_void,
     size_xy: (i32, i32),
 ) -> crate::Result<EditorWindow> {
-    let window = unsafe { EditorWindowImpl::build(parent, size_xy) }
-        .context("couldn't initialize window")?;
     let event_source =
-        EventSourceImpl::new(&window, size_xy).context("couldn't initialize event source")?;
-    Ok(EditorWindow {
-        window,
-        event_source,
-    })
+        unsafe { EditorWindowImpl::build(parent, size_xy) }.context("couldn't initialize window")?;
+    Ok(EditorWindow(event_source))
 }
 
 /// `RawWindowHandle` implementor returned by the `setup` function.
 /// Source of events from a corresponding window, created by the `setup` function.
 /// The window will be destroyed once this is dropped.
-pub struct EditorWindow {
-    event_source: EventSourceImpl, // drop first
-    window: EditorWindowImpl,      // drop second
-}
+
+pub struct EditorWindow(EditorWindowImpl);
 
 impl EditorWindow {
     /// Returns the next `WindowEvent`, if one is available. This should be called in a `while let`
     /// loop until empty.
     pub fn poll_event(&self) -> Option<WindowEvent> {
-        self.event_source.poll_event()
+        self.0.poll_event()
     }
 }
 
@@ -99,6 +91,6 @@ impl EditorWindow {
 /// through the `raw-window-handle` crate.
 unsafe impl HasRawWindowHandle for EditorWindow {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        self.window.raw_window_handle()
+        self.0.raw_window_handle()
     }
 }
