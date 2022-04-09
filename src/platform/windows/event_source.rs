@@ -7,26 +7,26 @@ use winapi::{
     um::{errhandlingapi, winuser},
 };
 
-use crate::platform::EditorWindowImpl;
-use crate::platform::EventSourceBackend;
 use crate::{
     event::{MouseButton, WindowEvent},
     platform::os::get_last_error,
 };
 
-pub(in crate::platform) struct EventSourceImpl {
+use super::window::ChildWindow;
+
+pub(in crate::platform) struct EventSource {
     hwnd: windef::HWND,
     incoming_window_events: Receiver<WindowEvent>,
 }
 
-impl EventSourceBackend for EventSourceImpl {
+impl EventSource {
     /// Window events must be received in the "window process" defined by the window's class, in
     /// its own main thread. However, the inversion of control flow in the VST API means that we
     /// can't run the windowing logic in the window process. Instead, we just use it to forward the
     /// events over a channel so that they can be polled lazily from the editor's `idle` function.
     /// The channel sender is heap-allocated, and its pointer is stored as extra "user data"
     /// associated with the HWND.
-    fn new(window: &EditorWindowImpl, size_xy: (i32, i32)) -> anyhow::Result<Self> {
+    pub fn new(window: &ChildWindow, size_xy: (i32, i32)) -> anyhow::Result<Self> {
         let (event_sender, incoming_window_events) = channel();
         let event_sender_ptr = Box::into_raw(Box::new((event_sender, size_xy)));
         unsafe {
@@ -52,7 +52,7 @@ impl EventSourceBackend for EventSourceImpl {
         })
     }
 
-    fn poll_event(&self) -> Option<WindowEvent> {
+    pub fn poll_event(&self) -> Option<WindowEvent> {
         match self.incoming_window_events.try_recv() {
             Ok(ev) => Some(ev),
             Err(std::sync::mpsc::TryRecvError::Empty) => None,
@@ -63,7 +63,7 @@ impl EventSourceBackend for EventSourceImpl {
     }
 }
 
-impl Drop for EventSourceImpl {
+impl Drop for EventSource {
     fn drop(&mut self) {
         unsafe {
             // set to null to prevent dangling pointer

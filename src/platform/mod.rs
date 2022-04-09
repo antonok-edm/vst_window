@@ -69,7 +69,7 @@ pub unsafe fn setup(
     size_xy: (i32, i32),
 ) -> crate::Result<EditorWindow> {
     let event_source =
-        unsafe { EditorWindowImpl::build(parent, size_xy) }.context("couldn't initialize window")?;
+        unsafe { EditorWindowImpl::build(parent, size_xy) }?;
     Ok(EditorWindow(event_source))
 }
 

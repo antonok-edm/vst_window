@@ -11,14 +11,14 @@ use winapi::{
     um::{libloaderapi, winuser},
 };
 
-use crate::platform::{os::get_last_error, EditorWindowBackend};
+use crate::platform::os::get_last_error;
 
-pub(in crate::platform) struct EditorWindowImpl {
+pub(in crate::platform) struct ChildWindow {
     pub hwnd: windef::HWND,
     _class: Arc<VstWindowClass>,
 }
 
-impl Drop for EditorWindowImpl {
+impl Drop for ChildWindow {
     fn drop(&mut self) {
         let error = unsafe { winuser::DestroyWindow(self.hwnd) };
         if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
@@ -34,7 +34,7 @@ impl Drop for EditorWindowImpl {
     }
 }
 
-unsafe impl HasRawWindowHandle for EditorWindowImpl {
+unsafe impl HasRawWindowHandle for ChildWindow {
     fn raw_window_handle(&self) -> RawWindowHandle {
         RawWindowHandle::Windows(WindowsHandle {
             hwnd: self.hwnd as *mut std::ffi::c_void,
@@ -45,13 +45,16 @@ unsafe impl HasRawWindowHandle for EditorWindowImpl {
     }
 }
 
-impl EditorWindowBackend for EditorWindowImpl {
+impl ChildWindow {
     /// On Windows, child window creation is as simple as calling `CreateWindowEx` with the parent
     /// HWND and the right set of flags.
     ///
     /// However, it's necessary to register a "window class" before the window can be created - see
     /// `WINDOW_CLASS`.
-    unsafe fn build(
+    /// 
+    /// # Safety
+    /// `parent` must be a valid HWND
+    pub unsafe fn build(
         parent: *mut std::os::raw::c_void,
         size_xy: (i32, i32),
     ) -> anyhow::Result<Self> {
