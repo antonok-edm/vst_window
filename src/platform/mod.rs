@@ -12,7 +12,6 @@
 //! This module contains wrapper code to alias the particular platform-specific module as `os`, and
 //! expose it under more the more restrictive `EditorWindow` and `EventSource` public types.
 
-use anyhow::Context;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
 use crate::event::WindowEvent;

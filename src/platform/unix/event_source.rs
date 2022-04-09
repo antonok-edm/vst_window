@@ -4,17 +4,16 @@ use std::sync::Arc;
 
 use x11rb::connection::Connection;
 
-use super::window::EditorWindowImpl;
+use super::window::ChildWindow;
 use crate::event::WindowEvent;
-use crate::platform::EventSourceBackend;
 
-pub(in crate::platform) struct EventSourceImpl {
+pub(in crate::platform) struct EventSource {
     connection: Arc<x11rb::xcb_ffi::XCBConnection>,
     size_xy: (i32, i32),
 }
 
-impl EventSourceBackend for EventSourceImpl {
-    fn new(window: &EditorWindowImpl, size_xy: (i32, i32)) -> anyhow::Result<Self> {
+impl EventSource {
+    pub fn new(window: &ChildWindow, size_xy: (i32, i32)) -> anyhow::Result<Self> {
         Ok(Self {
             connection: window.connection.clone(),
             size_xy,
@@ -23,7 +22,7 @@ impl EventSourceBackend for EventSourceImpl {
 
     /// The XCB API for getting window events is essentially identical to `vst_window`'s event
     /// polling API.
-    fn poll_event(&self) -> Option<WindowEvent> {
+    pub fn poll_event(&self) -> Option<WindowEvent> {
         loop {
             let maybe_event = match self.connection.poll_for_event() {
                 Ok(e) => e,
