@@ -3,7 +3,7 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use winapi::{
-    shared::{minwindef, windef},
+    shared::{minwindef, windef, windowsx},
     um::{errhandlingapi, winuser},
 };
 
@@ -119,8 +119,8 @@ pub(super) unsafe extern "system" fn wnd_proc(
         //winuser::WM_GETDLGCODE => return winuser::DLGC_WANTALLKEYS,
         // https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-mousemove
         winuser::WM_MOUSEMOVE => {
-            let x_pos = winapi::shared::windowsx::GET_X_LPARAM(lparam);
-            let y_pos = winapi::shared::windowsx::GET_Y_LPARAM(lparam);
+            let x_pos = windowsx::GET_X_LPARAM(lparam);
+            let y_pos = windowsx::GET_Y_LPARAM(lparam);
             let x = (x_pos as f32) / (size_xy.0 as f32);
             let y = (y_pos as f32) / (size_xy.1 as f32);
             event_sender

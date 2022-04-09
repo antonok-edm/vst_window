@@ -4,11 +4,7 @@ use std::os::raw::c_void;
 use std::sync::mpsc::{channel, Receiver};
 
 use cocoa::base::id;
-use objc::{
-    msg_send,
-    rc::StrongPtr,
-    sel, sel_impl,
-};
+use objc::{msg_send, rc::StrongPtr, sel, sel_impl};
 use raw_window_handle::{AppKitHandle, HasRawWindowHandle, RawWindowHandle};
 
 use crate::event::WindowEvent;

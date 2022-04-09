@@ -1,8 +1,8 @@
 //! Exposes platform-specific application logic using a cross-platform API.
 //!
 //! Each platform-specific implementation is done within a correspondingly named module (`unix`,
-//! `macos`, `windows`). 
-//! 
+//! `macos`, `windows`).
+//!
 //! This module contains wrapper code to alias the particular platform-specific module as `os`, and
 //! expose it under more the more restrictive `EditorWindow` type.
 
