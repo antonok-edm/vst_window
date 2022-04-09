@@ -8,20 +8,18 @@ use x11rb::{
     connection::Connection, protocol::xproto::ConnectionExt as _, wrapper::ConnectionExt as _,
 };
 
-use crate::platform::EditorWindowBackend;
-
-pub(in crate::platform) struct EditorWindowImpl {
+pub(in crate::platform) struct ChildWindow {
     pub connection: Arc<x11rb::xcb_ffi::XCBConnection>,
     window_id: x11rb::protocol::xproto::Window,
 }
 
-impl Drop for EditorWindowImpl {
+impl Drop for ChildWindow {
     fn drop(&mut self) {
         let _ = self.connection.destroy_window(self.window_id);
     }
 }
 
-unsafe impl HasRawWindowHandle for EditorWindowImpl {
+unsafe impl HasRawWindowHandle for ChildWindow {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let mut handle = XcbHandle::empty();
         handle.connection = self.connection.get_raw_xcb_connection() as *mut std::ffi::c_void;
@@ -37,7 +35,7 @@ x11rb::atom_manager! {
     }
 }
 
-impl EditorWindowBackend for EditorWindowImpl {
+impl ChildWindow {
     /// The VST API provides an XCB handle on Unix, so the window is setup using `xcb`.
     ///
     /// All XCB operations rely on a connection handle to the XCB backend. Conveniently, the XCB
@@ -45,7 +43,7 @@ impl EditorWindowBackend for EditorWindowImpl {
     ///
     /// XCB operations can be called from any thread - unlike the other platforms, there are
     /// practically no restrictions on the control flow of the windowing logic.
-    unsafe fn build(
+    pub fn build(
         parent: *mut std::os::raw::c_void,
         size_xy: (i32, i32),
     ) -> anyhow::Result<Self> {
