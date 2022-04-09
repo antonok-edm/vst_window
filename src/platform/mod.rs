@@ -1,16 +1,10 @@
 //! Exposes platform-specific application logic using a cross-platform API.
 //!
 //! Each platform-specific implementation is done within a correspondingly named module (`unix`,
-//! `macos`, `windows`). Each platform module has two submodules - `window` and `event_source`.
-//!
-//! The platform-specific `window` module exposes an `EditorWindowImpl` type that implements
-//! `EditorWindowBackend`.
-//!
-//! The platform-specific `event_source` module exposes an `EventSourceImpl` type that implements
-//! `EventSourceBackend`.
-//!
+//! `macos`, `windows`). 
+//! 
 //! This module contains wrapper code to alias the particular platform-specific module as `os`, and
-//! expose it under more the more restrictive `EditorWindow` and `EventSource` public types.
+//! expose it under more the more restrictive `EditorWindow` type.
 
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
