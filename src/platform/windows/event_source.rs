@@ -9,10 +9,11 @@ use winapi::{
 
 use crate::{
     event::{MouseButton, WindowEvent},
-    platform::os::get_last_error,
+    platform::os::format_last_error,
+    SetupError,
 };
 
-use super::window::ChildWindow;
+use super::{window::ChildWindow, wrap_last_error};
 
 pub(in crate::platform) struct EventSource {
     hwnd: windef::HWND,
@@ -26,7 +27,7 @@ impl EventSource {
     /// events over a channel so that they can be polled lazily from the editor's `idle` function.
     /// The channel sender is heap-allocated, and its pointer is stored as extra "user data"
     /// associated with the HWND.
-    pub fn new(window: &ChildWindow, size_xy: (i32, i32)) -> anyhow::Result<Self> {
+    pub fn new(window: &ChildWindow, size_xy: (i32, i32)) -> Result<Self, SetupError> {
         let (event_sender, incoming_window_events) = channel();
         let event_sender_ptr = Box::into_raw(Box::new((event_sender, size_xy)));
         unsafe {
@@ -38,11 +39,7 @@ impl EventSource {
             );
 
             if previous_value == 0 && errhandlingapi::GetLastError() != 0 {
-                return Err(crate::Error::Other {
-                    source: anyhow::anyhow!(get_last_error().1).context("SetWindowLongPtrW"),
-                    backend: crate::Backend::WinApi,
-                }
-                .into());
+                return Err(wrap_last_error("SetWindowLongPtrW"));
             }
         }
 
@@ -78,12 +75,11 @@ impl Drop for EventSource {
                 drop(Box::from_raw(event_sender_ptr));
             } else if log::log_enabled!(log::Level::Debug) && errhandlingapi::GetLastError() != 0 {
                 log::debug!(
-                    "Error: {:#}",
-                    anyhow::anyhow!(crate::Error::Other {
-                        source: anyhow::anyhow!(get_last_error().1).context("SetWindowLongPtrW"),
-                        backend: crate::Backend::WinApi,
-                    })
-                    .context("failed to cleanup event sender")
+                    "Error: {}",
+                    crate::ErrorChainPrinter(SetupError::with_context_boxed(
+                        format_last_error("SetWindowLongPtrW").into(),
+                        "failed to cleanup event sender"
+                    ))
                 );
             }
         }
@@ -107,7 +103,10 @@ pub(super) unsafe extern "system" fn wnd_proc(
         let event_sender_ptr = winuser::GetWindowLongPtrW(hwnd, winuser::GWLP_USERDATA)
             as *mut (Sender<WindowEvent>, (i32, i32));
         if event_sender_ptr.is_null() {
-            log::debug!("Ignored window event ({}) because event sender is not yet initialized (Win32)", umsg);
+            log::debug!(
+                "Ignored window event ({}) because event sender is not yet initialized (Win32)",
+                umsg
+            );
             return winuser::DefWindowProcW(hwnd, umsg, wparam, lparam);
         }
 

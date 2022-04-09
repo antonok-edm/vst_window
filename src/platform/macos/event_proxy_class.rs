@@ -16,7 +16,7 @@ use objc::{
     sel, sel_impl,
 };
 
-use crate::WindowEvent;
+use crate::{SetupError, WindowEvent};
 
 /// Name of the instance variable used to store the owned `EventDelegate` pointer in the `EventSubview` objective-c class.
 const EVENT_DELEGATE_IVAR: &str = "EVENT_DELEGATE_IVAR";
@@ -25,14 +25,18 @@ const EVENT_DELEGATE_IVAR: &str = "EVENT_DELEGATE_IVAR";
 type EventDelegateIvarType = *mut c_void;
 
 /// Instantiate an objective-c `EventProxyView` object.
-/// 
+///
 /// `EventProxyView` is a subclass of `NSView` and proxies window events to the given `event_sender`.
 /// `size_xy` is the size of the `NSView`.
 /// The newly created view will be added as a subview to `parent`.
-/// 
+///
 /// # Safety
 /// `parent` must be a valid objective-c object.
-pub unsafe fn instantiate_event_proxy(parent: id, event_sender: Sender<WindowEvent>, size_xy: (i32, i32)) -> anyhow::Result<StrongPtr> {
+pub unsafe fn instantiate_event_proxy(
+    parent: id,
+    event_sender: Sender<WindowEvent>,
+    size_xy: (i32, i32),
+) -> Result<StrongPtr, SetupError> {
     let event_proxy_view: id = unsafe { msg_send![*EVENT_PROXY_VIEW_CLASS, alloc] };
     let frame = NSRect::new(
         NSPoint::new(0., 0.),
@@ -48,16 +52,18 @@ pub unsafe fn instantiate_event_proxy(parent: id, event_sender: Sender<WindowEve
     let event_subview: id =
         unsafe { msg_send![event_proxy_view, initWithFrame:frame andDelegate:event_delegate_ptr] };
     if event_subview.is_null() {
-        unsafe { Box::from_raw(event_delegate_ptr as *mut EventDelegate); } // drop EventDelegate
+        unsafe {
+            Box::from_raw(event_delegate_ptr as *mut EventDelegate);
+        } // drop EventDelegate
 
-        return Err(crate::Error::Other {
-            source: anyhow::anyhow!("failed to intialize custom NSView"),
-            backend: crate::Backend::Cocoa,
-        }
-        .into());
+        return Err(SetupError::new_boxed(
+            String::from("failed to intialize custom NSView").into(),
+        ));
     }
 
-    unsafe { let _: () = msg_send![parent, addSubview: event_proxy_view]; }
+    unsafe {
+        let _: () = msg_send![parent, addSubview: event_proxy_view];
+    }
 
     Ok(unsafe { StrongPtr::new(event_proxy_view) })
 }
@@ -163,17 +169,23 @@ mod class_methods {
     use super::{EventDelegate, EventDelegateIvarType, EVENT_DELEGATE_IVAR};
 
     pub extern "C" fn init(this: &mut Object, _sel: Sel) -> *mut Object {
-        unsafe { let _: () = msg_send![this, release]; }
+        unsafe {
+            let _: () = msg_send![this, release];
+        }
         std::ptr::null_mut()
     }
 
     pub extern "C" fn init_with_frame(this: &mut Object, _sel: Sel, _frame: NSRect) -> *mut Object {
-        unsafe { let _: () = msg_send![this, release]; }
+        unsafe {
+            let _: () = msg_send![this, release];
+        }
         std::ptr::null_mut()
     }
 
     pub extern "C" fn init_with_coder(this: &mut Object, _sel: Sel, _coder: id) -> *mut Object {
-        unsafe { let _: () = msg_send![this, release]; }
+        unsafe {
+            let _: () = msg_send![this, release];
+        }
         std::ptr::null_mut()
     }
 
@@ -184,7 +196,9 @@ mod class_methods {
         delegate: *mut c_void,
     ) -> *mut Object {
         if delegate.is_null() {
-            unsafe { let _: () = msg_send![this, release]; }
+            unsafe {
+                let _: () = msg_send![this, release];
+            }
             return std::ptr::null_mut();
         }
 
@@ -204,9 +218,11 @@ mod class_methods {
         unsafe {
             let delegate_ptr: &mut *mut c_void =
                 this.get_mut_ivar::<EventDelegateIvarType>(EVENT_DELEGATE_IVAR);
-            
+
             if !(*delegate_ptr).is_null() {
-                drop(Box::<EventDelegate>::from_raw(*delegate_ptr as *mut EventDelegate));
+                drop(Box::<EventDelegate>::from_raw(
+                    *delegate_ptr as *mut EventDelegate,
+                ));
                 *delegate_ptr = std::ptr::null_mut(); // prevent double-free, use-after-free and similar shenanigans
             }
         }
@@ -262,7 +278,13 @@ mod class_methods {
 
     unsafe fn send_cursor_movement_get_delegate(view: &mut Object, event: id) -> &EventDelegate {
         let window_location = unsafe { cocoa::appkit::NSEvent::locationInWindow(event) };
-        let location = unsafe { cocoa::appkit::NSView::convertPoint_fromView_(view as id, window_location, std::ptr::null_mut()) };
+        let location = unsafe {
+            cocoa::appkit::NSView::convertPoint_fromView_(
+                view as id,
+                window_location,
+                std::ptr::null_mut(),
+            )
+        };
 
         let delegate = unsafe { EventDelegate::from_field(view) };
 

@@ -11,7 +11,10 @@ use winapi::{
     um::{libloaderapi, winuser},
 };
 
-use crate::platform::os::get_last_error;
+use crate::{
+    platform::os::{format_last_error, get_last_error, wrap_last_error},
+    InvalidParentError, SetupError,
+};
 
 pub(in crate::platform) struct ChildWindow {
     pub hwnd: windef::HWND,
@@ -24,11 +27,10 @@ impl Drop for ChildWindow {
         if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
             log::debug!(
                 "Error: {}",
-                anyhow::anyhow!(crate::Error::Other {
-                    source: anyhow::anyhow!(get_last_error().1).context("DestroyWindow"),
-                    backend: crate::Backend::WinApi,
-                })
-                .context("failed to destroy window")
+                crate::ErrorChainPrinter(SetupError::with_context_boxed(
+                    format_last_error("DestroyWindow").into(),
+                    "failed to destroy child window"
+                ))
             );
         }
     }
@@ -51,28 +53,29 @@ impl ChildWindow {
     ///
     /// However, it's necessary to register a "window class" before the window can be created - see
     /// `WINDOW_CLASS`.
-    /// 
+    ///
     /// # Safety
     /// `parent` must be a valid HWND
     pub unsafe fn build(
         parent: *mut std::os::raw::c_void,
         size_xy: (i32, i32),
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, SetupError> {
         // TODO validate window size potentially ERROR_INCORRECT_SIZE
 
         let instance = unsafe { libloaderapi::GetModuleHandleW(std::ptr::null()) };
         if instance.is_null() {
-            return Err(crate::Error::Other {
-                source: anyhow::anyhow!(get_last_error().1).context("GetModuleHandleW"),
-                backend: crate::Backend::WinApi,
-            }
-            .into());
+            return Err(wrap_last_error("GetModuleHandleW"));
         }
 
         let class = get_window_class(instance)?;
 
         let hwnd = unsafe {
             let window_type = winuser::WS_VISIBLE | winuser::WS_CHILD;
+
+            if parent.is_null() {
+                return Err(SetupError::new(InvalidParentError::new(parent)));
+            }
+
             let parent = parent as windef::HWND;
 
             winuser::CreateWindowExW(
@@ -94,17 +97,9 @@ impl ChildWindow {
             let (errno, _) = get_last_error();
             // special case invalid parent window case for easier debugging
             if errno == winerror::ERROR_INVALID_WINDOW_HANDLE {
-                return Err(crate::Error::Other {
-                    source: anyhow::anyhow!("invalid parent hwnd supplied"),
-                    backend: crate::Backend::WinApi,
-                }
-                .into());
+                return Err(SetupError::new(InvalidParentError::new(parent)));
             } else {
-                return Err(crate::Error::Other {
-                    source: anyhow::anyhow!(get_last_error().1).context("CreateWindowExW"),
-                    backend: crate::Backend::WinApi,
-                }
-                .into());
+                return Err(wrap_last_error("CreateWindowExW"));
             }
         }
 
@@ -130,7 +125,7 @@ fn MAKEINTATOMW(atom: minwindef::ATOM) -> ntdef::LPCWSTR {
 ///
 /// Crucially, the class must define a "window process", or main event loop. We use the `wnd_proc`
 /// function from the `event_source` module for this purpose.
-fn get_window_class(instance: minwindef::HINSTANCE) -> anyhow::Result<Arc<VstWindowClass>> {
+fn get_window_class(instance: minwindef::HINSTANCE) -> Result<Arc<VstWindowClass>, SetupError> {
     lazy_static::lazy_static! {
         static ref WINDOW_CLASS: Mutex<Weak<VstWindowClass>> = Mutex::new(Weak::new());
     }
@@ -151,7 +146,7 @@ fn get_window_class(instance: minwindef::HINSTANCE) -> anyhow::Result<Arc<VstWin
 struct VstWindowClass(minwindef::ATOM);
 
 impl VstWindowClass {
-    fn create(instance: minwindef::HINSTANCE) -> anyhow::Result<Self> {
+    fn create(instance: minwindef::HINSTANCE) -> Result<Self, SetupError> {
         let atom = unsafe {
             let class_ex = winuser::WNDCLASSEXW {
                 cbSize: std::mem::size_of::<winuser::WNDCLASSEXW>()
@@ -168,11 +163,7 @@ impl VstWindowClass {
         };
 
         if atom == 0 {
-            return Err(crate::Error::Other {
-                source: anyhow::anyhow!(get_last_error().1).context("RegisterClassExW"),
-                backend: crate::Backend::WinApi,
-            }
-            .into());
+            return Err(wrap_last_error("RegisterClassExW"));
         }
 
         Ok(Self(atom))
@@ -185,12 +176,11 @@ impl Drop for VstWindowClass {
             unsafe { winuser::UnregisterClassW(MAKEINTATOMW(self.0), std::ptr::null_mut()) };
         if error == minwindef::FALSE && log::log_enabled!(log::Level::Debug) {
             log::debug!(
-                "Error: {:#}",
-                anyhow::anyhow!(crate::Error::Other {
-                    source: anyhow::anyhow!(get_last_error().1).context("UnregisterClassW"),
-                    backend: crate::Backend::WinApi,
-                })
-                .context("failed to unregister window class")
+                "Error: {}",
+                crate::ErrorChainPrinter(SetupError::with_context_boxed(
+                    format_last_error("UnregisterClassW").into(),
+                    "failed to unregister window class"
+                ))
             );
         }
     }

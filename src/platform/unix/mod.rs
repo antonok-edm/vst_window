@@ -1,12 +1,14 @@
 //! Platform-specific utilities for Unix.
 
-use anyhow::Context;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+
+use crate::SetupError;
 
 use self::{event_source::EventSource, window::ChildWindow};
 
 use super::EditorWindowBackend;
 
+mod error;
 mod event_source;
 mod window;
 
@@ -22,10 +24,12 @@ unsafe impl HasRawWindowHandle for EditorWindowImpl {
 }
 
 impl EditorWindowBackend for EditorWindowImpl {
-    unsafe fn build(parent: *mut std::os::raw::c_void, size_xy: (i32, i32))
-        -> anyhow::Result<Self> {
-        let window = ChildWindow::build(parent, size_xy).context("couldn't initialize child window")?;
-        let event_source = EventSource::new(&window, size_xy).context("couldn't initialize event handler")?;
+    unsafe fn build(
+        parent: *mut std::os::raw::c_void,
+        size_xy: (i32, i32),
+    ) -> Result<Self, SetupError> {
+        let window = ChildWindow::build(parent, size_xy)?;
+        let event_source = EventSource::new(&window, size_xy)?;
 
         Ok(EditorWindowImpl {
             event_source,
