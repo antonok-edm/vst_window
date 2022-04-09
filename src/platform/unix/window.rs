@@ -2,11 +2,13 @@
 
 use std::{convert::TryInto, sync::Arc};
 
-use anyhow::Context;
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbHandle};
 use x11rb::{
-    connection::Connection, protocol::xproto::ConnectionExt as _, wrapper::ConnectionExt as _,
+    connection::Connection, protocol::xproto::ConnectionExt as _, rust_connection::ReplyError,
+    wrapper::ConnectionExt as _,
 };
+
+use crate::{InvalidParentError, InvalidSizeError, SetupError};
 
 pub(in crate::platform) struct ChildWindow {
     pub connection: Arc<x11rb::xcb_ffi::XCBConnection>,
@@ -46,37 +48,30 @@ impl ChildWindow {
     pub fn build(
         parent: *mut std::os::raw::c_void,
         size_xy: (i32, i32),
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, SetupError> {
         let size_xy: (u16, u16) = {
             (
                 size_xy
                     .0
                     .try_into()
-                    .map_err(|_| crate::Error::InvalidWindowSize {
-                        requested_size_xy: size_xy,
-                        limits: 0..i16::MAX.into(),
-                    })?,
+                    .map_err(|_| SetupError::new(InvalidSizeError(size_xy)))?,
                 size_xy
                     .1
                     .try_into()
-                    .map_err(|_| crate::Error::InvalidWindowSize {
-                        requested_size_xy: size_xy,
-                        limits: 0..i16::MAX.into(),
-                    })?,
+                    .map_err(|_| SetupError::new(InvalidSizeError(size_xy)))?,
             )
         };
 
         use x11rb::protocol::xproto;
 
-        let (connection, _screen_num) = x11rb::xcb_ffi::XCBConnection::connect(None)
-            .context("couldn't establish connection to display server")?;
+        let (connection, _screen_num) =
+            x11rb::xcb_ffi::XCBConnection::connect(None).map_err(|conn_err| {
+                SetupError::with_context(conn_err, "couldn't connect to display server")
+            })?;
 
         let parent_id: u32 = (parent as usize)
             .try_into()
-            .map_err(|_| crate::Error::Other {
-                source: anyhow::anyhow!("invalid parent id supplied"),
-                backend: crate::Backend::X11,
-            })?;
+            .map_err(|_| SetupError::new(InvalidParentError::new(parent)))?;
         use x11rb::protocol::xproto::EventMask;
         // listen to appropriate events
         let event_mask = EventMask::EXPOSURE
@@ -107,10 +102,13 @@ impl ChildWindow {
             .sequence_number();
 
         // (property name) strings must first be interned to be used
-        let atom_collection = AtomCollection::new(&connection)
-            .context("failed to intern strings")?
-            .reply()
-            .context("failed to intern strings")?;
+        let atom_collection =
+            AtomCollection::new(&connection)?
+                .reply()
+                .map_err(|err| match err {
+                    ReplyError::ConnectionError(conn_err) => conn_err.into(),
+                    _ => SetupError::with_context(err, "failed to intern strings"),
+                })?;
 
         // indicate that this is a dialog type window
         // see https://specifications.freedesktop.org/wm-spec/1.3/ar01s05.html#idm44949527944400
@@ -133,7 +131,7 @@ impl ChildWindow {
         // show the window
         connection.map_window(window_id)?;
 
-        connection.sync().context("failed to sync connection")?;
+        connection.sync()?;
 
         while let Some(event) = connection.poll_for_event()? {
             if let x11rb::protocol::Event::Error(err) = event {
@@ -141,21 +139,25 @@ impl ChildWindow {
                 if err.sequence == (create_window_seq & u16::MAX as u64) as u16
                     && err.error_kind == x11rb::protocol::ErrorKind::Window
                 {
-                    return Err(anyhow::anyhow!(crate::Error::Other {
-                        source: anyhow::anyhow!("invalid parent id supplied"),
-                        backend: crate::Backend::X11,
-                    }));
+                    return Err(SetupError::new(InvalidParentError::new(parent)));
                 }
                 // Pretty print if extension and request name are known, otherwise print raw codes
                 if let (Some(ext_name), Some(req_name)) = (&err.extension_name, err.request_name) {
-                    return Err(anyhow::anyhow!(
-                        "request {} ({}) failed: {:?}",
-                        req_name,
-                        ext_name,
-                        err.error_kind
+                    return Err(SetupError::new_boxed(
+                        format!(
+                            "request {} ({}) with value {} failed: {:?}",
+                            req_name, ext_name, err.bad_value, err.error_kind
+                        )
+                        .into(),
                     ));
                 } else {
-                    return Err(anyhow::anyhow!("{:?}", err));
+                    return Err(SetupError::new_boxed(
+                        format!(
+                            "request opcode (major {}, minor {}) with value {} failed: {:?}",
+                            err.major_opcode, err.minor_opcode, err.bad_value, err.error_kind
+                        )
+                        .into(),
+                    ));
                 }
             }
         }

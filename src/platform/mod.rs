@@ -15,6 +15,7 @@
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
 use crate::event::WindowEvent;
+use crate::SetupError;
 
 #[cfg_attr(
     any(
@@ -38,8 +39,10 @@ trait EditorWindowBackend: raw_window_handle::HasRawWindowHandle + Sized {
     ///
     /// # Safety
     /// `parent` must be a valid window identifier
-    unsafe fn build(parent: *mut std::os::raw::c_void, size_xy: (i32, i32))
-        -> anyhow::Result<Self>;
+    unsafe fn build(
+        parent: *mut std::os::raw::c_void,
+        size_xy: (i32, i32),
+    ) -> Result<Self, SetupError>;
 
     /// Returns the next `WindowEvent`, if one is available.
     fn poll_event(&self) -> Option<WindowEvent>;
@@ -50,11 +53,11 @@ trait EditorWindowBackend: raw_window_handle::HasRawWindowHandle + Sized {
 /// A child window is created which seamlessly sits inside the window identified by the
 /// platform-specific handle `parent`. It is placed at (0, 0) with a given `size_xy`.
 /// The size may be silently saturated to an upper bound on some platforms.
-/// 
+///
 /// `parent` is passed by the VST host to the plugin in a `effEditOpen` operation.
-/// 
+///
 /// `size_xy` should be the same size returned by the `effEditGetRect` operation.
-/// 
+///
 /// See `EditorWindow` for more details on the returned handle.
 ///
 /// # Safety
@@ -66,9 +69,8 @@ trait EditorWindowBackend: raw_window_handle::HasRawWindowHandle + Sized {
 pub unsafe fn setup(
     parent: *mut std::os::raw::c_void,
     size_xy: (i32, i32),
-) -> crate::Result<EditorWindow> {
-    let event_source =
-        unsafe { EditorWindowImpl::build(parent, size_xy) }?;
+) -> Result<EditorWindow, SetupError> {
+    let event_source = unsafe { EditorWindowImpl::build(parent, size_xy) }?;
     Ok(EditorWindow(event_source))
 }
 

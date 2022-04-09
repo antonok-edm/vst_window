@@ -13,6 +13,7 @@ use raw_window_handle::{AppKitHandle, HasRawWindowHandle, RawWindowHandle};
 
 use crate::event::WindowEvent;
 use crate::platform::os::event_proxy_class::instantiate_event_proxy;
+use crate::{InvalidParentError, SetupError};
 
 mod event_proxy_class;
 
@@ -36,16 +37,12 @@ impl crate::platform::EditorWindowBackend for EditorWindowImpl {
     unsafe fn build(
         parent: *mut std::os::raw::c_void,
         size_xy: (i32, i32),
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, SetupError> {
         // TODO validate window size
 
         // return error if parent is nil to aid debugging
         if parent.is_null() {
-            return Err(crate::Error::Other {
-                source: anyhow::anyhow!("invalid parent (null pointer)"),
-                backend: crate::Backend::Cocoa,
-            }
-            .into());
+            return Err(SetupError::new(InvalidParentError::new(parent)));
         }
 
         let parent = parent as id;
@@ -55,10 +52,11 @@ impl crate::platform::EditorWindowBackend for EditorWindowImpl {
 
             StrongPtr::retain(window)
         };
-        
+
         let (event_sender, incoming_events) = channel();
 
-        let event_proxy: StrongPtr = unsafe { instantiate_event_proxy(parent, event_sender, size_xy)? };
+        let event_proxy: StrongPtr =
+            unsafe { instantiate_event_proxy(parent, event_sender, size_xy)? };
 
         Ok(Self {
             event_proxy,

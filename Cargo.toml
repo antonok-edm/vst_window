@@ -19,8 +19,6 @@ default = ["windows-error"]
 [dependencies]
 raw-window-handle = "^ 0.4"
 log = "0.4"
-thiserror = "1.0"
-anyhow = "1.0"
 
 [target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "macos")))'.dependencies]
 x11rb = { version = "0.9", features = ["allow-unsafe-code"] }
@@ -38,6 +36,7 @@ lazy_static = "1.4"
 
 [dev-dependencies]
 vst = "^ 0.2.0"
+anyhow = "1.0"
 
 [[example]]
 name = "basic"

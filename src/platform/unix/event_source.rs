@@ -5,7 +5,7 @@ use std::sync::Arc;
 use x11rb::connection::Connection;
 
 use super::window::ChildWindow;
-use crate::event::WindowEvent;
+use crate::{event::WindowEvent, ErrorChainPrinter, SetupError};
 
 pub(in crate::platform) struct EventSource {
     connection: Arc<x11rb::xcb_ffi::XCBConnection>,
@@ -13,7 +13,7 @@ pub(in crate::platform) struct EventSource {
 }
 
 impl EventSource {
-    pub fn new(window: &ChildWindow, size_xy: (i32, i32)) -> anyhow::Result<Self> {
+    pub fn new(window: &ChildWindow, size_xy: (i32, i32)) -> Result<Self, SetupError> {
         Ok(Self {
             connection: window.connection.clone(),
             size_xy,
@@ -28,12 +28,8 @@ impl EventSource {
                 Ok(e) => e,
                 Err(error) => {
                     log::debug!(
-                        "Error: {:#}",
-                        anyhow::anyhow!(crate::Error::Other {
-                            source: anyhow::anyhow!(error),
-                            backend: crate::Backend::X11,
-                        })
-                        .context("failed to poll for new events")
+                        "Error: failed to poll for new events (X11): {}",
+                        ErrorChainPrinter(error)
                     );
                     return None;
                 }
