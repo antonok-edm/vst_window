@@ -2,7 +2,7 @@
 
 use std::{convert::TryInto, sync::Arc};
 
-use raw_window_handle::{unix::XcbHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbHandle};
 use x11rb::{
     connection::Connection, protocol::xproto::ConnectionExt as _, rust_connection::ReplyError,
     wrapper::ConnectionExt as _,
@@ -23,11 +23,10 @@ impl Drop for ChildWindow {
 
 unsafe impl HasRawWindowHandle for ChildWindow {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        RawWindowHandle::Xcb(XcbHandle {
-            connection: self.connection.get_raw_xcb_connection() as *mut std::ffi::c_void,
-            window: self.window_id,
-            ..XcbHandle::empty()
-        })
+        let mut handle = XcbHandle::empty();
+        handle.connection = self.connection.get_raw_xcb_connection() as *mut std::ffi::c_void;
+        handle.window = self.window_id;
+        RawWindowHandle::Xcb(handle)
     }
 }
 

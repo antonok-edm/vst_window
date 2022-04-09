@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex, Weak},
 };
 
-use raw_window_handle::{windows::WindowsHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, Win32Handle};
 use winapi::{
     shared::{minwindef, ntdef, windef, winerror},
     um::{libloaderapi, winuser},
@@ -38,12 +38,11 @@ impl Drop for ChildWindow {
 
 unsafe impl HasRawWindowHandle for ChildWindow {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        RawWindowHandle::Windows(WindowsHandle {
-            hwnd: self.hwnd as *mut std::ffi::c_void,
-            hinstance: unsafe { libloaderapi::GetModuleHandleW(std::ptr::null()) }
-                as *mut std::ffi::c_void,
-            ..WindowsHandle::empty()
-        })
+        let mut handle = Win32Handle::empty();
+        handle.hwnd = self.hwnd as *mut std::ffi::c_void;
+        handle.hinstance =
+            unsafe { libloaderapi::GetModuleHandleW(std::ptr::null()) } as *mut std::ffi::c_void;
+        RawWindowHandle::Win32(handle)
     }
 }
 

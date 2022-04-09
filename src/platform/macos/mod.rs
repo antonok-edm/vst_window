@@ -5,8 +5,7 @@ use std::sync::mpsc::{channel, Receiver};
 
 use cocoa::base::id;
 use objc::{msg_send, rc::StrongPtr, sel, sel_impl};
-use raw_window_handle::macos::MacOSHandle;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{AppKitHandle, HasRawWindowHandle, RawWindowHandle};
 
 use crate::event::WindowEvent;
 use crate::platform::os::event_proxy_class::instantiate_event_proxy;
@@ -23,11 +22,10 @@ pub(in crate::platform) struct EditorWindowImpl {
 
 unsafe impl HasRawWindowHandle for EditorWindowImpl {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        RawWindowHandle::MacOS(MacOSHandle {
-            ns_window: *self.ns_window as *mut c_void,
-            ns_view: *self.event_proxy as *mut c_void,
-            ..MacOSHandle::empty()
-        })
+        let mut handle = AppKitHandle::empty();
+        handle.ns_window = *self.ns_window as *mut c_void;
+        handle.ns_view = *self.event_proxy as *mut c_void;
+        RawWindowHandle::AppKit(handle)
     }
 }
 

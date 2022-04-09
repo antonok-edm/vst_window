@@ -1,6 +1,6 @@
 [package]
 name = "vst_window"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Anton Lazarev <https://antonok.com>"]
 edition = "2018"
 description = "Cross-platform windowing library for VST plugins"
@@ -17,17 +17,11 @@ crate-type = ["lib"]
 default = ["windows-error"]
 
 [dependencies]
-raw-window-handle = "^ 0.3"
+raw-window-handle = "^ 0.4"
 log = "0.4"
 
 [target.'cfg(all(unix, not(target_os = "ios"), not(target_os = "macos")))'.dependencies]
 x11rb = { version = "0.9", features = ["allow-unsafe-code"] }
-# `vst_window` does not directly use `gfx-backend-vulkan`, but any rendering
-# libraries accepting our RawWindowHandle must be able to accept an `xcb`
-# window. So far, those all use `gfx-backend-vulkan`, which does not enable
-# `xcb` support by default.
-# `gfx-backend-vulkan` introduced the `xcb` optional dependency in 0.3.
-gfx-backend-vulkan = { version = ">= 0.3", features = ["xcb"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "^ 0.22"
@@ -35,7 +29,7 @@ objc = { version = "^ 0.2", features = ["exception"] }
 lazy_static = "1.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "^ 0.3.9", features = ["windowsx"] }
+winapi = { version = "^ 0.3.9", features = ["errhandlingapi", "libloaderapi", "minwindef", "ntdef", "windef", "windowsx", "winerror", "winuser"] }
 windows-error = { version = "1.1", optional = true }
 wchar = "0.11"
 lazy_static = "1.4"
