@@ -8,7 +8,7 @@ use vst::{
     plugin::{HostCallback, Info, Plugin},
     plugin_main,
 };
-use vst_window::{setup, EventSource, WindowEvent};
+use vst_window::{setup, EditorWindow, WindowEvent};
 
 #[derive(Default)]
 struct BasicPlugin {
@@ -43,14 +43,14 @@ plugin_main!(BasicPlugin);
 #[derive(Default)]
 struct MyPluginEditor {
     renderer: Option<MyRenderer>,
-    window_events: Option<EventSource>,
+    window: Option<EditorWindow>,
 }
 
 const WINDOW_DIMENSIONS: (i32, i32) = (300, 200);
 
 impl Editor for MyPluginEditor {
     fn size(&self) -> (i32, i32) {
-        (WINDOW_DIMENSIONS.0 as i32, WINDOW_DIMENSIONS.1 as i32)
+        (WINDOW_DIMENSIONS.0, WINDOW_DIMENSIONS.1)
     }
 
     fn position(&self) -> (i32, i32) {
@@ -58,30 +58,38 @@ impl Editor for MyPluginEditor {
     }
 
     fn open(&mut self, parent: *mut c_void) -> bool {
-        if self.window_events.is_none() {
-            let (window_handle, event_source) = setup(parent, WINDOW_DIMENSIONS);
-            self.renderer = Some(MyRenderer::new(window_handle));
-            self.window_events = Some(event_source);
-            true
+        if self.window.is_none() {
+            match unsafe { setup(parent, WINDOW_DIMENSIONS) } {
+                Ok(window) => {
+                    self.renderer = Some(MyRenderer::new(&window));
+                    self.window = Some(window);
+                    true
+                }
+                Err(error) => {
+                    log::error!("Failed to open editor window: {:#}", anyhow::anyhow!(error));
+                    false
+                }
+            }
         } else {
             false
         }
     }
 
     fn is_open(&mut self) -> bool {
-        self.window_events.is_some()
+        self.window.is_some()
     }
 
     fn close(&mut self) {
         drop(self.renderer.take());
-        drop(self.window_events.take());
+        drop(self.window.take());
     }
 
     fn idle(&mut self) {
-        if let Some(window_events) = &mut self.window_events {
-            while let Some(event) = window_events.poll_event() {
+        if let Some(window) = &mut self.window {
+            while let Some(event) = window.poll_event() {
                 match event {
                     WindowEvent::MouseClick(_) => println!("Click!"),
+                    WindowEvent::MouseRelease(_) => println!("Clack!"),
                     _ => (),
                 }
             }
@@ -95,7 +103,7 @@ impl Editor for MyPluginEditor {
 struct MyRenderer;
 
 impl MyRenderer {
-    pub fn new<W: raw_window_handle::HasRawWindowHandle>(_handle: W) -> Self {
+    pub fn new<W: raw_window_handle::HasRawWindowHandle>(_handle: &W) -> Self {
         Self
     }
     pub fn draw_frame(&mut self) {
